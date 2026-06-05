@@ -1,0 +1,40 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+
+  .dark body {
+    @apply bg-black text-white;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+  }
+}
+
+@layer components {
+  .dropi-gradient {
+    background: linear-gradient(135deg, #65d83e 0%, #8ae968 100%);
+  }
+
+  .app-panel {
+    @apply rounded-xl border border-slate-200 bg-white;
+  }
+
+  .app-section-title {
+    @apply text-[15px] font-semibold text-slate-950 dark:text-white;
+  }
+}

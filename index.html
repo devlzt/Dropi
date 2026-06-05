@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#65D83E" />
+    <link rel="icon" type="image/png" href="/dropi-logo.png" />
+    <link rel="apple-touch-icon" href="/dropi-logo.png" />
+    <title>Dropi</title>
+    <script>
+      if (localStorage.getItem("dropi-theme") === "dark") {
+        document.documentElement.classList.add("dark");
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
