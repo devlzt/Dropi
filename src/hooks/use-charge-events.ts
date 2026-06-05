@@ -1,5 +1,6 @@
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import type { ChargeEventType } from "@/types/database";
+import type { ChargeEvent, ChargeEventType } from "@/types/database";
 
 export async function createChargeEvent(input: {
   organization_id: string;
@@ -16,4 +17,22 @@ export async function createChargeEvent(input: {
     message: input.message ?? null,
   });
   if (error) throw error;
+}
+
+export function useChargeEvents(chargeIds: string[]) {
+  const sortedIds = [...new Set(chargeIds)].sort();
+
+  return useQuery({
+    queryKey: ["charge-events", sortedIds],
+    enabled: sortedIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("charge_events")
+        .select("*")
+        .in("charge_id", sortedIds)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as ChargeEvent[];
+    },
+  });
 }

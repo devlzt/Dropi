@@ -1,7 +1,8 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, LockKeyhole, Mail, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, LockKeyhole, Mail, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { Link } from "react-router-dom";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -45,6 +46,14 @@ export function LoginPage() {
     <div className="grid min-h-screen bg-background lg:grid-cols-[1.05fr_0.95fr]">
       <section className="flex items-center px-6 py-10 sm:px-10 lg:px-16">
         <div className="mx-auto w-full max-w-xl">
+          <Link
+            to="/"
+            className="mb-6 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:border-primary/40 hover:bg-primary-pale/35 hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-primary/50 dark:hover:bg-primary/10 dark:hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar para tela principal
+          </Link>
+
           <div className="flex items-center gap-3">
             <img src="/dropi-logo.png" alt="Dropi" className="h-12 w-12 rounded-2xl object-cover" />
             <div>

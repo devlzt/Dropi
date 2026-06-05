@@ -58,6 +58,8 @@ export type ChargeEventType =
   | "message_generated"
   | "message_copied"
   | "whatsapp_opened"
+  | "whatsapp_sent"
+  | "whatsapp_failed"
   | "pix_created"
   | "webhook_payment_confirmed";
 

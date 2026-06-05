@@ -1,4 +1,4 @@
-import { CheckCircle2, Copy, Edit3, ExternalLink, FilePlus2, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, Clock3, Copy, Edit3, ExternalLink, FilePlus2, Loader2, MessageCircle, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ChargeStatusBadge } from "@/components/charge-status-badge";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -10,14 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
-import { createChargeEvent } from "@/hooks/use-charge-events";
+import { createChargeEvent, useChargeEvents } from "@/hooks/use-charge-events";
 import { useCharges } from "@/hooks/use-charges";
 import { useClients } from "@/hooks/use-clients";
 import { useOrganization } from "@/hooks/use-organization";
 import { buildLocalChargeMessage } from "@/lib/messages";
+import { supabase } from "@/lib/supabase";
 import { formatCurrency, formatDate, getRealChargeStatus, whatsappUrl } from "@/lib/utils";
 import { useToast } from "@/providers/toast-provider";
-import type { ChargeStatus, ChargeWithClient } from "@/types/database";
+import type { ChargeEvent, ChargeStatus, ChargeWithClient } from "@/types/database";
 
 const filterLabels: Record<ChargeStatus | "all", string> = {
   all: "Todas",
@@ -30,11 +31,14 @@ const filterLabels: Record<ChargeStatus | "all", string> = {
 export function ChargesPage() {
   const [filter, setFilter] = useState<ChargeStatus | "all">("all");
   const [editing, setEditing] = useState<ChargeWithClient | null>(null);
+  const [details, setDetails] = useState<ChargeWithClient | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState<ChargeWithClient | null>(null);
+  const [sendingChargeId, setSendingChargeId] = useState<string | null>(null);
   const { clients } = useClients();
   const { organization } = useOrganization();
   const { charges, isLoading, createCharge, updateCharge, deleteCharge, markChargePaid, isMutating } = useCharges();
+  const eventQuery = useChargeEvents(charges.map((charge) => charge.id));
   const { toast } = useToast();
 
   const filtered = useMemo(() => {
@@ -70,6 +74,31 @@ export function ChargesPage() {
     const message = buildLocalChargeMessage(charge, organization, "educado");
     await createChargeEvent({ organization_id: charge.organization_id, charge_id: charge.id, client_id: charge.client_id, type: "whatsapp_opened", message });
     window.open(whatsappUrl(charge.clients?.phone ?? "", message), "_blank", "noopener,noreferrer");
+  }
+
+  async function chargeNow(charge: ChargeWithClient) {
+    setSendingChargeId(charge.id);
+    try {
+      const { data, error } = await supabase.functions.invoke<{ success: boolean; event_id: string; error?: string }>("send-whatsapp", {
+        body: { charge_id: charge.id },
+      });
+      if (error || !data?.success) throw new Error(error?.message ?? data?.error ?? "send-whatsapp failed");
+
+      await eventQuery.refetch();
+      toast({ type: "success", title: `WhatsApp enviado para ${charge.clients?.name ?? "cliente"} ✓` });
+    } catch {
+      toast({ type: "error", title: "Falha ao enviar. Tente novamente." });
+    } finally {
+      setSendingChargeId(null);
+    }
+  }
+
+  function eventsFor(chargeId: string) {
+    return (eventQuery.data ?? []).filter((event) => event.charge_id === chargeId);
+  }
+
+  function lastSentAt(chargeId: string) {
+    return eventsFor(chargeId).find((event) => event.type === "whatsapp_sent")?.created_at;
   }
 
   return (
@@ -115,6 +144,7 @@ export function ChargesPage() {
                   <th className="px-5 py-3">Valor</th>
                   <th className="px-5 py-3">Vencimento</th>
                   <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">Ultimo envio</th>
                   <th className="px-5 py-3 text-right">Acoes</th>
                 </tr>
               </thead>
@@ -129,8 +159,16 @@ export function ChargesPage() {
                     <td className="px-5 py-4 font-medium text-slate-950 dark:text-white">{formatCurrency(charge.amount)}</td>
                     <td className="px-5 py-4 text-slate-600">{formatDate(charge.due_date)}</td>
                     <td className="px-5 py-4"><ChargeStatusBadge charge={charge} /></td>
+                    <td className="px-5 py-4 text-slate-600">{lastSentAt(charge.id) ? new Date(lastSentAt(charge.id)!).toLocaleString("pt-BR") : "-"}</td>
                     <td className="px-5 py-4">
                       <div className="flex justify-end gap-2">
+                        {["pending", "overdue"].includes(getRealChargeStatus(charge)) ? (
+                          <Button variant="outline" size="sm" onClick={() => chargeNow(charge)} disabled={sendingChargeId === charge.id} title="Cobrar agora">
+                            {sendingChargeId === charge.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
+                            Cobrar agora
+                          </Button>
+                        ) : null}
+                        <Button variant="outline" size="icon" onClick={() => setDetails(charge)} title="Historico"><Clock3 className="h-4 w-4" /></Button>
                         <Button variant="outline" size="icon" onClick={() => copyMessage(charge)} title="Copiar mensagem"><Copy className="h-4 w-4" /></Button>
                         <Button variant="outline" size="icon" onClick={() => openWhatsApp(charge)} title="Abrir WhatsApp"><ExternalLink className="h-4 w-4" /></Button>
                         <Button variant="outline" size="icon" onClick={() => markChargePaid(charge)} disabled={getRealChargeStatus(charge) === "paid"} title="Marcar como paga"><CheckCircle2 className="h-4 w-4" /></Button>
@@ -148,6 +186,10 @@ export function ChargesPage() {
 
       <Dialog open={dialogOpen} title={editing ? "Editar cobranca" : "Nova cobranca"} description={clients.length === 0 ? "Cadastre um cliente antes de criar cobrancas." : undefined} onClose={() => setDialogOpen(false)}>
         <ChargeForm charge={editing} clients={clients} loading={isMutating} onCancel={() => setDialogOpen(false)} onSubmit={submit} />
+      </Dialog>
+
+      <Dialog open={Boolean(details)} title="Historico da cobranca" onClose={() => setDetails(null)}>
+        {details ? <ChargeHistory charge={details} events={eventsFor(details.id)} /> : null}
       </Dialog>
 
       <ConfirmDialog
@@ -169,4 +211,64 @@ export function ChargesPage() {
       />
     </div>
   );
+}
+
+function ChargeHistory({ charge, events }: { charge: ChargeWithClient; events: ChargeEvent[] }) {
+  return (
+    <div className="space-y-5 p-5">
+      <div className="rounded-xl border border-slate-200 bg-[#F7F8FA] p-4 dark:border-white/10 dark:bg-black">
+        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Cobranca</p>
+        <p className="mt-1 font-semibold text-slate-950 dark:text-white">{charge.description}</p>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+          {charge.clients?.name ?? "Cliente removido"} - {formatCurrency(charge.amount)}
+        </p>
+      </div>
+
+      <section>
+        <h3 className="text-sm font-semibold text-slate-950 dark:text-white">Historico</h3>
+        {events.length === 0 ? (
+          <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Nenhum evento registrado ainda.</p>
+        ) : (
+          <div className="mt-4 space-y-4">
+            {events.map((event) => (
+              <TimelineItem key={event.id} event={event} />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function TimelineItem({ event }: { event: ChargeEvent }) {
+  const metadata = parseEventMessage(event.message);
+  const sent = event.type === "whatsapp_sent";
+  const failed = event.type === "whatsapp_failed";
+  const dot = sent ? "bg-primary" : failed ? "bg-overdue" : "bg-slate-300 dark:bg-slate-600";
+  const title = sent ? "WhatsApp enviado" : failed ? "Falha no envio" : event.type;
+  const detail = sent ? metadata.message_preview : failed ? metadata.error : event.message;
+
+  return (
+    <div className="flex gap-3">
+      <div className="pt-1">
+        <span className={`block h-3 w-3 rounded-full ${dot}`} />
+      </div>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold text-slate-950 dark:text-white">{title}</p>
+          <span className="text-xs text-slate-500 dark:text-slate-400">{new Date(event.created_at).toLocaleString("pt-BR")}</span>
+        </div>
+        {detail ? <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{detail}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function parseEventMessage(message: string | null) {
+  if (!message) return {} as { message_preview?: string; error?: string };
+  try {
+    return JSON.parse(message) as { message_preview?: string; error?: string };
+  } catch {
+    return { message_preview: message, error: message };
+  }
 }
